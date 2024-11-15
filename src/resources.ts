@@ -1,4 +1,5 @@
-import { ImageSource, Loader } from "excalibur";
+import { ImageSource } from "excalibur";
+import { Loader } from './loader';
 import sword from "./images/sword.png";
 
 export const Resources = {
