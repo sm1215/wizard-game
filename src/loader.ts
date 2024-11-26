@@ -9,7 +9,7 @@ export class Loader extends DefaultLoader {
 
   override onDraw(ctx: CanvasRenderingContext2D) {
     // Returns the progress of the loader as a number between [0, 1] inclusive.
-    console.log(this.progress);
+    // console.log(this.progress);
   }
 
   override async onUserAction(): Promise<void> {

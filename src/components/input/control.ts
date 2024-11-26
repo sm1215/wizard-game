@@ -1,17 +1,18 @@
-import * as ex from 'excalibur'
+import { Component, Entity, Keys } from "excalibur";
 
-export class ControlsComponent extends ex.Component {
-  declare owner: ex.Entity;
+export class ControlsComponent extends Component {
+  declare owner: Entity;
 
   type = 'input';
 
   controls = {
-    Left: ex.Keys.A,
-    Right: ex.Keys.D,
-    Up: ex.Keys.W,
-    Down: ex.Keys.S,
-    Jump: ex.Keys.Space,
-    Run: ex.Keys.ShiftLeft,
+    Left: Keys.A,
+    Right: Keys.D,
+    Up: Keys.W,
+    Down: Keys.S,
+    Jump: Keys.Space,
+    Run: Keys.ShiftLeft,
+
   } as const;
 
   isHeld(control: keyof typeof this.controls) {
@@ -56,5 +57,18 @@ export class ControlsComponent extends ex.Component {
       if (this.controls.Up.includes(key as any)) return 'Up';
       if (this.controls.Down.includes(key as any)) return 'Down';
     }
+  }
+
+  getPointerCoords() {
+    const engine = this.owner.scene!.engine;
+    const pointer = engine.input.pointers.primary;
+
+    // Options:
+    // lastPagePos
+    // lastScreenPos
+    // lastWorldPos
+    // For simplicity, going to use lastWorldPos for now and see how that works out
+    // console.log('pointer', pointer);
+    return pointer.lastWorldPos;
   }
 }

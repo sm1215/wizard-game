@@ -1,12 +1,8 @@
-import { Actor, vec, Color } from "excalibur";
+import { Actor, Vector, vec, Color, Rectangle, Line } from "excalibur";
+import * as ex from "excalibur";
 import { Resources } from "./resources";
 import { ControlsComponent } from "./components/input/control";
 
-
-interface Facing {
-  x: null | string,
-  y: null | string
-};
 export class Player extends Actor {
   /**
   * The amount of acceleration to apply to the player when they are walking or running.
@@ -16,7 +12,7 @@ export class Player extends Actor {
   /**
   * The amount of deceleration to apply to the player when they are stopping (i.e not hold any movement keys)
   */
-  STOP_DECELERATION = this.ACCELERATION;
+  STOP_DECELERATION = 600;
 
   /**
   * The amount of time the player must be running before they can sprint.
@@ -33,19 +29,9 @@ export class Player extends Actor {
   */
   RUN_MAX_VELOCITY = 400;
 
-  /**
-  * The direction the player is facing.
-  */
-  facing: Facing = {
-    x: 'right',
-    y: null
-  };
-
   get maxVelocity() {
     return this.controls.isRunning ? this.RUN_MAX_VELOCITY : this.WALK_MAX_VELOCITY;
   }
-
-  controls = new PlayerControlsComponent();
 
   get isXMovementAllowed() {
     // TODO: add collisions here
@@ -57,16 +43,29 @@ export class Player extends Actor {
     return true;
   }
 
+  // get playerCenterCoords() {
+  //   return vec(this.pos.x + this.width / 2, this.pos.y + this.height / 2);
+  // }
+
+  controls = new PlayerControlsComponent();
+  sight: PlayerSight;
+
   constructor() {
+    // center the player for now
+    const startPos = vec(800 / 2 - 50 / 2, 600 / 2 - 60 / 2);
     super({
       name: 'player',
-      pos: vec(150, 150),
+      pos: startPos,
       width: 50,
       height: 60,
       color: new Color(61, 87, 113, 1)
     });
 
+    console.log('this.pos', this.pos);
+
     this.addComponent(this.controls);
+    this.sight = new PlayerSight(startPos);
+    this.addChild(this.sight);
   }
 
   onInitialize() {
@@ -83,7 +82,7 @@ export class Player extends Actor {
     this.acc.x = 0;
     this.acc.y = 0;
 
-    super.update(engine, delta)
+    super.update(engine, delta);
   }
 
   onPostUpdate(engine: ex.Engine, delta: number): void {
@@ -102,45 +101,68 @@ export class Player extends Actor {
   * Process user input to control the character
   */
   handleInput(engine: ex.Engine, delta: number) {
+    // uncomment once prototyping is finished
+    this.setFacingDirection();
     const heldXDirection = this.controls.getHeldXDirection();
     const heldYDirection = this.controls.getHeldYDirection();
-
-    this.facing = {
-      x: null,
-      y: null
-    }
 
     // move character and set facing direction
     if (heldXDirection && this.isXMovementAllowed) {
       const direction = heldXDirection === 'Left' ? -1 : 1;
       const accel = this.ACCELERATION * direction;
-
-      this.facing.x = direction === -1 ? 'left' : 'right';
       this.acc.x += accel;
     }
     if (heldYDirection && this.isYMovementAllowed) {
       const direction = heldYDirection === 'Up' ? -1 : 1;
       const accel = this.ACCELERATION * direction;
-
-      this.facing.y = direction === -1 ? 'up' : 'down';
       this.acc.y += accel;
     }
   }
 
+  setFacingDirection() {
+    const pointerCoords = this.controls.getPointerCoords();
+    this.sight.updateRotation(this.pos, pointerCoords);
+  }
+
   applyDeceleration() {
     const isOverMaxXVelocity = Math.abs(this.vel.x) > this.maxVelocity;
-    const isOverMaxYVelocity = Math.abs(this.vel.y) > this.maxVelocity;
+    const xDirectionChanged = (
+      this.acc.x < 0 && this.vel.x > 0 ||
+      this.acc.x > 0 && this.vel.x < 0
+    );
+    const slowXVelocity = (
+      (!this.controls.isXMoving && this.vel.x !== 0) ||
+      (xDirectionChanged && this.controls.isXMoving)
+    )
 
-    // decelerate if we're over the max velocity or stopped walking
-    if (!this.controls.isXMoving || isOverMaxXVelocity) {
-      if (this.vel.x !== 0) {
-        this.acc.x = -this.STOP_DECELERATION * Math.sign(this.vel.x);
-      }
+    const isOverMaxYVelocity = Math.abs(this.vel.y) > this.maxVelocity;
+    const yDirectionChanged = (
+      this.acc.y < 0 && this.vel.y > 0 ||
+      this.acc.y > 0 && this.vel.y < 0
+    );
+    const slowYVelocity = (
+      (!this.controls.isYMoving && this.vel.y !== 0) ||
+      (yDirectionChanged && this.controls.isYMoving)
+    )
+
+    // decelerate if we're over the max velocity
+    if (isOverMaxXVelocity) {
+      this.acc.x = this.maxVelocity * Math.sign(this.vel.x);
     }
-    if (!this.controls.isYMoving || isOverMaxYVelocity) {
-      if (this.vel.y !== 0) {
-        this.acc.y = -this.STOP_DECELERATION * Math.sign(this.vel.y);
-      }
+
+    // slow velocity is we're stopping or turning the opposite direction
+    if(slowXVelocity) {
+      this.acc.x = -this.STOP_DECELERATION * Math.sign(this.vel.x);
+    }
+
+    // decelerate if we're over the max velocity
+    if (isOverMaxYVelocity) {
+      this.acc.y = this.maxVelocity * Math.sign(this.vel.y);
+    }
+
+    // slow velocity is we're stopping or turning the opposite direction
+    if(slowYVelocity) {
+      this.acc.y = -this.STOP_DECELERATION * Math.sign(this.vel.y);
     }
 
     const isXDecelerating = (
@@ -151,6 +173,7 @@ export class Player extends Actor {
       Math.sign(this.vel.y) !== 0 &&
       Math.sign(this.vel.y) !== Math.sign(this.acc.y)
     );
+
     // clamp to 0 if we're close enough
     if (isXDecelerating && Math.abs(this.vel.x) < 1) {
       this.vel.x = 0;
@@ -191,5 +214,39 @@ class PlayerControlsComponent extends ControlsComponent {
       this.isXMoving ||
       this.isYMoving
     ) && this.isHeld('Run');
+  }
+}
+
+// A child actor that represents the direction a player is looking
+export class PlayerSight extends Actor {
+  line: Line;
+  constructor(startPos: Vector) {
+    super({
+      name: 'playerSight',
+      pos: vec(0, 0)
+    });
+    // need to set the graphics anchor
+    // https://github.com/excaliburjs/Excalibur/issues/3117
+    this.graphics.anchor = vec(0, 0);
+
+    this.line = this.graphics.use(
+      new Line({
+        start: vec(0, 0),
+        end: vec(100, 0),
+        thickness: 2,
+        color: new Color(255, 0, 0, 1)
+      })
+    );
+
+    this.line.origin = vec(0, 0);
+  }
+
+  updateRotation(playerCoords: Vector, pointerCoords: Vector) {
+    // find difference between x / y coords
+    const dx = playerCoords.x - pointerCoords.x;
+    const dy = playerCoords.y - pointerCoords.y;
+
+    const theta = Math.atan2(-dy, -dx);
+    this.line.rotation = theta;
   }
 }
